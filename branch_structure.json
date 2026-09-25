@@ -1,0 +1,21 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "fix/1642-treasury-single-source",
+    "fix/1746-csv-parse-error-location",
+    "main",
+    "origin"
+  ],
+  "parent": {
+    "fix/1642-treasury-single-source": "main",
+    "fix/1746-csv-parse-error-location": "main",
+    "main": null,
+    "origin": "main"
+  },
+  "order": [
+    "main",
+    "fix/1642-treasury-single-source",
+    "fix/1746-csv-parse-error-location",
+    "origin"
+  ]
+}
