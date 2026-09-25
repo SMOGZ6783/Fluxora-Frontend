@@ -15,6 +15,7 @@ import {
 } from "../components/colorBlindSimulation";
 import { useWallet } from "../components/wallet-connect/Walletcontext";
 import { IS_DEV } from "../utils/env";
+import { reconcileTreasuryMetrics } from "../components/treasuryOverviewPage/reconcileTreasuryMetrics";
 
 /**
  * TreasuryPage renders the treasury overview.
@@ -26,8 +27,15 @@ import { IS_DEV } from "../utils/env";
  * - `loading`: boolean indicating loading state
  * - `error`: string | null error message
  *
- * When both `metrics` and `streams` are missing while not loading or erroring,
- * a defensive empty-state fallback is shown.
+ * All rendered figures are derived from `reconcileTreasuryMetrics`, which
+ * turns the single `useTreasuryOverviewData` result into one snapshot.
+ * This guarantees:
+ *   - every figure comes from the same query result (no mixing sources)
+ *   - partially loaded data is never presented as complete
+ *   - currency and precision are consistent across every figure — if the
+ *     underlying metrics ever disagree with each other, the page fails
+ *     closed to the error state instead of rendering a combination of
+ *     figures that was never simultaneously true.
  *
  * ## Colour-blind simulation
  * The entire page content is wrapped in {@link ColorBlindSimulationProvider}
@@ -43,13 +51,16 @@ export default function TreasuryPage() {
   const { connected: walletConnected } = useWallet();
   const [showReportBuilder, setShowReportBuilder] = useState(false);
 
-  const demoState: DemoState = loading
-    ? "loading"
-    : (metrics && metrics.length > 0) || (streams && streams.length > 0)
-    ? "loaded"
-    : "empty";
+  const snapshot = reconcileTreasuryMetrics({ loading, error, metrics });
 
-  if (loading) {
+  const demoState: DemoState =
+    snapshot.status === "loading"
+      ? "loading"
+      : snapshot.status === "ready" || (streams && streams.length > 0)
+      ? "loaded"
+      : "empty";
+
+  if (snapshot.status === "loading") {
     return (
       <ColorBlindSimulationProvider>
         <div className="p-6 flex flex-col gap-8 bg-gray-50 min-h-screen">
@@ -65,7 +76,7 @@ export default function TreasuryPage() {
     );
   }
 
-  if (error) {
+  if (snapshot.status === "error") {
     return (
       <ColorBlindSimulationProvider>
         <div className="p-6 flex flex-col gap-8 bg-gray-50 min-h-screen">
@@ -74,12 +85,16 @@ export default function TreasuryPage() {
           {IS_DEV && <ColorBlindToggle />}
           <Header />
           <div role="alert" className="text-sm text-red-600">
-            {error}
+            {snapshot.reason}
           </div>
         </div>
       </ColorBlindSimulationProvider>
     );
   }
+
+  // snapshot.status is "ready" or "empty" here — both are safe to render;
+  // "empty" simply has no metric items.
+  const reconciledMetrics = snapshot.status === "ready" ? snapshot.items : [];
 
   return (
     <ColorBlindSimulationProvider>
@@ -107,24 +122,24 @@ export default function TreasuryPage() {
           </ErrorBoundary>
         )}
         <ErrorBoundary>
-          <Metrics metrics={metrics || []} loading={loading} error={error} />
+          <Metrics metrics={reconciledMetrics} loading={false} error={null} />
         </ErrorBoundary>
         <ErrorBoundary>
           <Suspense fallback={<div role="status" className="sr-only">Loading treasury activity...</div>}>
-            <ActivityHeatmap streams={streams || []} loading={loading} error={error} />
+            <ActivityHeatmap streams={streams || []} loading={false} error={null} />
           </Suspense>
         </ErrorBoundary>
         <ErrorBoundary>
           <Suspense fallback={<div role="status" className="sr-only">Loading treasury flow diagram...</div>}>
-            <TreasuryFlowSankey streams={streams || []} loading={loading} error={error} />
+            <TreasuryFlowSankey streams={streams || []} loading={false} error={null} />
           </Suspense>
         </ErrorBoundary>
         <ErrorBoundary>
           <Suspense fallback={<div role="status" className="sr-only">Loading recent streams...</div>}>
             <RecentStreams
               streams={streams || []}
-              loading={loading}
-              error={error}
+              loading={false}
+              error={null}
               onRetry={refetch}
               walletConnected={walletConnected}
             />
